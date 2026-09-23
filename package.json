@@ -16,11 +16,11 @@
     "deploy-pages": "scripts/deploy.sh"
   },
   "dependencies": {
-    "blockdb": "https://github.com/shivan2418/blockdb/releases/download/v0.3.0/blockdb-0.3.0.tgz"
+    "blockdb": "https://github.com/shivan2418/blockdb/releases/download/v0.3.1/blockdb-0.3.1.tgz"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "blockdb-cli": "https://github.com/shivan2418/blockdb/releases/download/v0.3.0/blockdb-cli-0.3.0.tgz",
+    "blockdb-cli": "https://github.com/shivan2418/blockdb/releases/download/v0.3.1/blockdb-cli-0.3.1.tgz",
     "svelte": "^5.57.1",
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.3",
