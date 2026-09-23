@@ -79,6 +79,9 @@
 <footer>
   Address data from <a href="https://openaddresses.io">OpenAddresses</a>, under each source's license.
   Queried in the browser with <a href="https://github.com/shivan2418/blockdb">blockdb</a>.
+  <br />
+  Some addresses have no city or ZIP code because the county that published them left it out.
+  <a href="https://github.com/shivan2418/block-addresses#limits">Why</a>
 </footer>
 
 <style>
@@ -161,6 +164,7 @@
     padding: 0 16px;
     text-align: center;
     font-size: 12px;
+    line-height: 1.6;
     color: #aaa;
   }
 

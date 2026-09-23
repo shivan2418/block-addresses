@@ -10,7 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy-pages": "scripts/deploy.sh"
   },
   "dependencies": {
     "blockdb": "link:../blockdb/packages/blockdb"
