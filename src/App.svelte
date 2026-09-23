@@ -86,7 +86,10 @@
 
 <main>
   <h1>Search {total === null ? "every" : total.toLocaleString("en-US")} US addresses</h1>
-  <p class="tagline">There's no API and no server. The browser queries static files directly.</p>
+  <p class="tagline">
+    A proof of concept for <a href="https://github.com/shivan2418/blockdb">blockdb</a>. There's no API
+    and no server: your browser searches static files directly.
+  </p>
 
   <div class="box">
     <input
@@ -96,7 +99,7 @@
       oninput={onInput}
       onkeydown={(e) => e.key === "Escape" && clear()}
       readonly={locked !== null}
-      placeholder="Start typing an address, e.g. 1600 Pennsylvania Ave NW, Washington DC"
+      placeholder="e.g. 1600 Pennsylvania Ave, DC"
       autocomplete="off"
       spellcheck="false"
       aria-label="Address"
@@ -145,13 +148,17 @@
 {/if}
 
 <footer>
-  Addresses from <a href="https://openaddresses.io">OpenAddresses</a> and the
-  <a href="https://www.transportation.gov/gis/national-address-database">National Address Database</a>
-  via <a href="https://overturemaps.org">Overture Maps</a>; missing cities and ZIP codes filled in from
-  U.S. Census boundaries. Queried in the browser with <a href="https://github.com/shivan2418/blockdb">blockdb</a>.
-  <br />
-  Built from what local governments publish, so this isn't USPS-validated.
-  <a href="https://github.com/shivan2418/block-addresses#limits">Limits</a>
+  <p>
+    Addresses from <a href="https://openaddresses.io">OpenAddresses</a> and the
+    <a href="https://www.transportation.gov/gis/national-address-database">National Address Database</a>
+    (via <a href="https://overturemaps.org">Overture Maps</a>). Missing cities and ZIP codes are filled in
+    from U.S. Census boundaries.
+  </p>
+  <p>
+    Built from what local governments publish, so addresses aren't validated against USPS records.
+    <a href="https://github.com/shivan2418/block-addresses#limits">Limits</a> ·
+    <a href="https://github.com/shivan2418/block-addresses">Source</a>
+  </p>
 </footer>
 
 <style>
@@ -323,11 +330,21 @@
   }
 
   footer {
+    max-width: 640px;
+    margin: 0 auto;
     padding: 0 16px 16px;
     text-align: center;
     font-size: 12px;
     line-height: 1.6;
     color: #aaa;
+  }
+
+  footer p {
+    margin: 0 0 4px;
+  }
+
+  .tagline a {
+    color: inherit;
   }
 
   footer a {
