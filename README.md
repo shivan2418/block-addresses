@@ -17,8 +17,8 @@ pointed at more than a thousand times as many records.
 | OpenAddresses US collections (4 zips, address layers only) | 1,801 sources, 194M rows, 56 GB |
 | Overture addresses, US rows (mostly the National Address Database) | 126M rows, 970 MB |
 | Merged, cleaned and deduplicated (`data/addresses/*.ndjson`) | 159.8M addresses, 15 GB |
-| Built with `blockdb build`, gzipped (`public/blockdb/`) | 6,614 blocks, 794 MB |
-| Downloaded by one search | from about 50 KB to a few MB |
+| Built with `blockdb build`, gzipped (`public/blockdb/`) | 9,673 blocks, 817 MB |
+| Downloaded by one search | usually 80–200 KB, up to about 500 KB |
 
 GitHub Pages allows 1 GB per site, so the goal from the start was to fit the country under that.
 
@@ -41,24 +41,31 @@ addresses had no city and 13.5% had no ZIP code.
 
 ## How a search works
 
-Blocks are sorted by street name. Typing `1600 pennsylvania ave nw, washington dc` becomes:
+Every address carries a sort key, `STREET|CITY|STATE`, and the blocks are sorted by it. Typing
+`100 congress ave austin tx` becomes:
 
 ```ts
 db.addresses.findMany({
   where: {
-    street: { startsWith: "PENNSYLVANIA AVE NW" },
-    number: { equals: "1600" },
-    city: { startsWith: "WASHINGTON" },
-    state: { equals: "DC" },
+    key: { startsWith: "CONGRESS AVE|AUSTIN" },
+    number: { equals: "100" },
+    state: { equals: "TX" },
   },
-  limit: 5,
+  limit: 20,
 });
 ```
 
-The manifest (about 250 KB, fetched once) tells the browser which blocks hold streets starting
-with `PENNSYLVANIA AVE NW`. The small indexes for `city`, `state` and ZIP code narrow that down
-further. The browser fetches those few blocks, filters them (including by house number), and
-stops at five matches.
+The manifest (about 350 KB, fetched once) records where each block's keys start, so the browser
+knows which blocks hold `CONGRESS AVE|AUSTIN…` without asking anything else. That's usually one
+block of about 120 KB gzipped. The browser fetches it, filters it (by house number, state and
+ZIP code), and shows the matches. A street without a city (`123 main st`) reads the first
+blocks of that street and stops once it has 20 results. The queries run in a Web Worker, so
+unpacking a block never blocks typing.
+
+Why the city is in the key: blockdb never splits records with the same key across blocks. Sorted
+by street alone, all 453,641 addresses on a street called `MAIN ST` sat in one 41.5 MB block,
+and every search on it downloaded about 4 MB. With the city in the key, they spread over 26
+normal blocks in town order, and `991 main st springfield ma` reads one of them (0.17 MB).
 
 The order of what you type doesn't matter much, and commas are optional:
 `2 ridge st eastchester ny 10709`, `2 Ridge St, Eastchester, NY 10709`, `eastchester 2 ridge st`
@@ -118,16 +125,19 @@ is normalized exactly the way the stored streets were: `350 fifth avenue` finds 
   tell them apart from real addresses.
 - **Matching is by prefix, not fuzzy.** `main st` finds `MAIN ST` and `MAIN ST EXT`, but a
   typo such as `mian st` finds nothing.
-- **Common street names are expensive.** Blocks are split by street name, and `MAIN ST` alone
-  spans dozens of them. A search for `123 main st` without a city can download a few megabytes.
-  Sorting by street *and* city would fix this. It's the next thing to try.
+- **A street is only matched exactly when a city follows it.** `1600 pennsylvania ave washington`
+  first looks for a street named exactly `PENNSYLVANIA AVE` in Washington. The real one is
+  `PENNSYLVANIA AVE NW`, so that finds nothing, and the search falls back to the street as a
+  prefix with the city as a filter. The fallback finds it but reads a few more blocks (about
+  0.5 MB). Without a street type (`2 ridge eastchester`), there's no way to tell where the street
+  ends, so it finds nothing.
 - **A street is needed.** A bare house number, city or ZIP code doesn't search on its own, since
   each would match thousands or millions of addresses.
 
 ## Running it locally
 
 You need Node 24 and pnpm. blockdb isn't on npm yet, so it installs from the
-[v0.3.1 GitHub Release](https://github.com/shivan2418/blockdb/releases/tag/v0.3.1) tarballs.
+[v0.4.0 GitHub Release](https://github.com/shivan2418/blockdb/releases/tag/v0.4.0) tarballs.
 
 ```sh
 pnpm install
@@ -166,8 +176,8 @@ free disk. All downloads are gitignored.
 3. `pnpm fetch-census` downloads the Census boundary files into `census/` (about 130 MB).
 4. `pnpm compact` merges, cleans, deduplicates and backfills into `data/addresses/`. This takes
    about 16 minutes.
-5. `pnpm build-data` builds `public/blockdb/` and `src/blockdb/`. This takes about 12 minutes
-   and peaks around 1.5 GB of memory.
+5. `pnpm build-data` builds `public/blockdb/` and `src/blockdb/`. This takes about 14 minutes
+   and peaks around 1.2 GB of memory.
 
 ## Deploying
 

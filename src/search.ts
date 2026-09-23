@@ -45,9 +45,9 @@ const STATE_NAMES: Record<string, string> = {
 };
 const STATES = new Set(Object.values(STATE_NAMES));
 
-// The same cleanup compact.py applies: uppercase, drop . , #, collapse whitespace.
+// The same cleanup compact.py applies: uppercase, drop . , # |, collapse whitespace.
 function clean(s: string): string {
-  return s.toUpperCase().replace(/[.,#]/g, "").replace(/\s+/g, " ").trim();
+  return s.toUpperCase().replace(/[.,#|]/g, "").replace(/\s+/g, " ").trim();
 }
 
 function commonPrefix(a: string, b: string): string {
@@ -68,7 +68,7 @@ function mayBeType(t: string): boolean {
 // the abbreviation ("ST"); a half-typed ordinal word ("FIFT": FIFTH? FIFTEENTH?) is dropped.
 // A looser prefix only means more candidates, never missing ones. Returns null while there is
 // nothing left to match on.
-function streetPrefix(text: string): string | null {
+function streetPrefix(text: string, typing = true): string | null {
   const tens = TENS.join("|");
   const units = UNIT_ORDINALS.join("|");
   const joined = clean(text).replace(new RegExp(`\\b(${tens})-(${units})\\b`, "g"), "$1 $2");
@@ -86,7 +86,7 @@ function streetPrefix(text: string): string | null {
   }
 
   const last = tokens.length - 1;
-  if (last >= 0 && !lastIsWord) {
+  if (typing && last >= 0 && !lastIsWord) {
     const t = tokens[last];
     const partial = Object.entries(ABBREVIATIONS).find(([long, short]) => long.startsWith(t) && !short.startsWith(t));
     if (partial) tokens[last] = commonPrefix(t, partial[1]) || t;
@@ -100,7 +100,7 @@ function streetPrefix(text: string): string | null {
     if (m[2]) return ordinal(n);
     const next = tokens[i + 1];
     if (next === undefined) return m[1];
-    const nextIsTyped = i + 1 === tokens.length - 1 && !lastIsWord;
+    const nextIsTyped = typing && i + 1 === tokens.length - 1 && !lastIsWord;
     return BARE_ORDINAL_TYPES.includes(next) || (nextIsTyped && mayBeType(next)) ? ordinal(n) : t;
   });
 
@@ -110,6 +110,8 @@ function streetPrefix(text: string): string | null {
 export interface Query {
   number?: string;
   street?: string;
+  /** The street is complete: a comma, or a city, state or ZIP came after it. */
+  streetEnded?: true;
   city?: string;
   state?: string;
   postcode?: string;
@@ -165,10 +167,11 @@ function isHouseNumber(t: string): boolean {
   return /^\d[\w-]*$/.test(t) && !/^\d+(ST|ND|RD|TH)$/.test(t);
 }
 
-function query(number: string | undefined, streetTokens: string[], place: Place): Query | null {
-  const street = streetTokens.length ? streetPrefix(streetTokens.join(" ")) : null;
+function query(number: string | undefined, streetTokens: string[], place: Place, ended = false): Query | null {
+  // A finished street isn't half-typed, so its last word is taken as it is.
+  const street = streetTokens.length ? streetPrefix(streetTokens.join(" "), !ended) : null;
   if (!street) return null;
-  return { ...(number && { number }), street, ...place };
+  return { ...(number && { number }), street, ...(ended && { streetEnded: true as const }), ...place };
 }
 
 // Every plausible reading of the input, most specific first. Nothing about the order is
@@ -219,7 +222,7 @@ export function parse(input: string): Query[] {
     if (end >= body.length) continue;
     for (const lp of leadPlaces) {
       for (const tp of places(body.slice(end), true)) {
-        const q = query(number, body.slice(0, end), { ...lp, ...tp });
+        const q = query(number, body.slice(0, end), { ...lp, ...tp }, true);
         if (q) readings.push(q);
       }
     }
@@ -233,11 +236,21 @@ export function parse(input: string): Query[] {
   return readings;
 }
 
+// Records are sorted by key, "STREET|CITY|STATE" (see compact.py). A street still being typed
+// is a prefix of the key; a finished one narrows it to that street, and with a city to that
+// town's run of blocks, which is the whole point of the key: "MAIN ST|SPRINGFIELD" reads one
+// block, where "MAIN ST" alone spans every town in the country.
+export function keyPrefix(q: Query): string {
+  return q.streetEnded ? `${q.street}|${q.city ?? ""}` : q.street!;
+}
+
 function where(q: Query): Where {
+  const key = keyPrefix(q);
+  const cityInKey = q.streetEnded && q.city;
   return {
-    street: { startsWith: q.street! },
+    key: { startsWith: key },
     ...(q.number && { number: { equals: q.number } }),
-    ...(q.city && { city: { startsWith: q.city } }),
+    ...(q.city && !cityInKey && { city: { startsWith: q.city } }),
     ...(q.state && { state: { equals: q.state } }),
     ...(q.postcode && { postcode: q.postcode.length === 5 ? { equals: q.postcode } : { startsWith: q.postcode } }),
   };
@@ -260,14 +273,27 @@ export async function search(input: string, limit = 20): Promise<Addresses[] | n
   previous = { input, controller };
   const { signal } = controller;
   // One or two letters of a street match nearly everything, so they'd only cost a download.
-  const readings = parse(input).filter((q) => q.street!.replace(/ /g, "").length >= MIN_STREET);
-  if (!readings.length) return null;
-  const pages = await Promise.all(readings.map((q) => db.addresses.findMany({ where: where(q), limit, signal })));
-  // Interleave, so a reading that matches nothing useful can't crowd out the others.
+  const parsed = parse(input).filter((q) => q.street!.replace(/ /g, "").length >= MIN_STREET);
+  if (!parsed.length) return null;
+  // Each reading is searched as an exact street first: its key prefix names one run of blocks
+  // ("MAIN ST|SPRINGFIELD"). Only if that finds fewer than a full page does it fall back to the
+  // street as a prefix, which also matches what was left off ("PENNSYLVANIA AVE" → "... NW")
+  // and variants ("MAIN ST EXT"), with the city as a separate filter. The exact results come
+  // first either way, since variants sort ahead of the plain street (a space sorts before "|").
+  const lists = await Promise.all(
+    parsed.map(async (q) => {
+      const exact = await db.addresses.findMany({ where: where({ ...q, streetEnded: true }), limit, signal });
+      if (exact.records.length >= limit) return exact.records;
+      const { streetEnded: _, ...open } = q;
+      const more = await db.addresses.findMany({ where: where(open), limit, signal });
+      return [...exact.records, ...more.records];
+    }),
+  );
+  // Interleave the readings, so one that matches nothing useful can't crowd out the others.
   const unique = new Map<string, Addresses>();
-  for (let i = 0; i < limit; i++) {
-    for (const page of pages) {
-      const r = page.records[i];
+  for (let i = 0; unique.size < limit && lists.some((l) => i < l.length); i++) {
+    for (const list of lists) {
+      const r = list[i];
       if (r && !unique.has(format(r))) unique.set(format(r), r);
     }
   }

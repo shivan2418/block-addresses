@@ -6,8 +6,11 @@
     "path": "data/addresses/*.ndjson"
   },
   "schema": {
-    "sortField": "street",
+    "sortField": "key",
     "fields": {
+      "key": {
+        "kind": "string"
+      },
       "number": {
         "kind": "string"
       },
@@ -15,8 +18,7 @@
         "kind": "string"
       },
       "state": {
-        "kind": "string",
-        "indexed": true
+        "kind": "string"
       },
       "city": {
         "kind": "string",

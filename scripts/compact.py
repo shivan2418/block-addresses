@@ -76,7 +76,7 @@ ABBREVIATE = "CASE t " + " ".join(
 
 
 def cleaned(col: str) -> str:
-    return f"regexp_replace(regexp_replace(upper(trim({col})), '[.,#]', '', 'g'), '\\s+', ' ', 'g')"
+    return f"regexp_replace(regexp_replace(upper(trim({col})), '[.,#|]', '', 'g'), '\\s+', ' ', 'g')"
 
 
 def city_cleaned(col: str) -> str:
@@ -255,7 +255,11 @@ def compact_state(con: duckdb.DuckDBPyConnection, state: str) -> tuple[int, int]
     with open(tmp, "w") as f:
         while batch := rows.fetchmany(100_000):
             for number, street, unit, city, postcode in batch:
-                record = {"number": number, "street": street}
+                # The sort key. Sorting by street alone put all 450k "MAIN ST" addresses in one
+                # 40 MB block, since blockdb never splits equal keys; with the city and state in
+                # the key they spread over normal-size blocks in town order, and a search that
+                # names the town reads just one. "|" is stripped from every field by cleaned().
+                record = {"key": f"{street}|{city}|{region}", "number": number, "street": street}
                 if unit:
                     record["unit"] = unit
                 if city:

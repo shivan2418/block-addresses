@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parse } from "./search";
+import { keyPrefix, parse } from "./search";
 
 const street = (input: string) => parse(input)[0]?.street;
 
@@ -10,31 +10,31 @@ const RIDGE = { number: "2", street: "RIDGE ST" };
 describe("parse: the order people type things in", () => {
   it.each([
     ["number street", "2 ridge st", {}],
-    ["number street state", "2 ridge st ny", { state: "NY" }],
-    ["number street state name", "2 ridge st new york", { state: "NY" }],
-    ["number street zip", "2 ridge st 10709", { postcode: "10709" }],
-    ["number street zip+4", "2 ridge st 10709-1234", { postcode: "10709" }],
-    ["number street city", "2 ridge st eastchester", { city: "EASTCHESTER" }],
-    ["number street city state", "2 ridge st eastchester ny", { city: "EASTCHESTER", state: "NY" }],
-    ["number street city state name", "2 ridge st eastchester new york", { city: "EASTCHESTER", state: "NY" }],
-    ["number street city state zip", "2 ridge st eastchester ny 10709", { city: "EASTCHESTER", state: "NY", postcode: "10709" }],
-    ["number street zip city", "2 ridge st 10709 eastchester", { city: "EASTCHESTER", postcode: "10709" }],
-    ["with commas", "2 Ridge St, Eastchester, NY 10709", { city: "EASTCHESTER", state: "NY", postcode: "10709" }],
-    ["long street type", "2 ridge street eastchester", { city: "EASTCHESTER" }],
+    ["number street state", "2 ridge st ny", { state: "NY", streetEnded: true }],
+    ["number street state name", "2 ridge st new york", { state: "NY", streetEnded: true }],
+    ["number street zip", "2 ridge st 10709", { postcode: "10709", streetEnded: true }],
+    ["number street zip+4", "2 ridge st 10709-1234", { postcode: "10709", streetEnded: true }],
+    ["number street city", "2 ridge st eastchester", { city: "EASTCHESTER", streetEnded: true }],
+    ["number street city state", "2 ridge st eastchester ny", { city: "EASTCHESTER", state: "NY", streetEnded: true }],
+    ["number street city state name", "2 ridge st eastchester new york", { city: "EASTCHESTER", state: "NY", streetEnded: true }],
+    ["number street city state zip", "2 ridge st eastchester ny 10709", { city: "EASTCHESTER", state: "NY", postcode: "10709", streetEnded: true }],
+    ["number street zip city", "2 ridge st 10709 eastchester", { city: "EASTCHESTER", postcode: "10709", streetEnded: true }],
+    ["with commas", "2 Ridge St, Eastchester, NY 10709", { city: "EASTCHESTER", state: "NY", postcode: "10709", streetEnded: true }],
+    ["long street type", "2 ridge street eastchester", { city: "EASTCHESTER", streetEnded: true }],
     ["city first", "eastchester 2 ridge st", { city: "EASTCHESTER" }],
     ["city state first", "eastchester ny 2 ridge st", { city: "EASTCHESTER", state: "NY" }],
     ["city first, with a comma", "eastchester, 2 ridge st", { city: "EASTCHESTER" }],
     ["zip first", "10709 2 ridge st", { postcode: "10709" }],
     ["state first", "ny 2 ridge st", { state: "NY" }],
-    ["zip first, city after", "10709 2 ridge st eastchester", { city: "EASTCHESTER", postcode: "10709" }],
+    ["zip first, city after", "10709 2 ridge st eastchester", { city: "EASTCHESTER", postcode: "10709", streetEnded: true }],
   ])("%s: %s", (_, input, place) => {
     expect(parse(input)[0]).toEqual({ ...RIDGE, ...place });
   });
 
   it.each([
-    ["half-typed city", "2 ridge st eastch", { city: "EASTCH" }],
-    ["half-typed state", "2 ridge st eastchester n", { city: "EASTCHESTER" }],
-    ["half-typed zip", "2 ridge st 107", { postcode: "107" }],
+    ["half-typed city", "2 ridge st eastch", { city: "EASTCH", streetEnded: true }],
+    ["half-typed state", "2 ridge st eastchester n", { city: "EASTCHESTER", streetEnded: true }],
+    ["half-typed zip", "2 ridge st 107", { postcode: "107", streetEnded: true }],
     ["half-typed street type", "2 ridge stre", {}],
   ])("while typing, %s: %s", (_, input, place) => {
     expect(parse(input)[0]).toEqual({ ...RIDGE, ...place });
@@ -48,41 +48,41 @@ describe("parse: the order people type things in", () => {
 
   it("tries a lone state name as a city too", () => {
     expect(parse("1600 pennsylvania ave washington")).toEqual([
-      { number: "1600", street: "PENNSYLVANIA AVE", state: "WA" },
-      { number: "1600", street: "PENNSYLVANIA AVE", city: "WASHINGTON" },
+      { number: "1600", street: "PENNSYLVANIA AVE", streetEnded: true, state: "WA" },
+      { number: "1600", street: "PENNSYLVANIA AVE", streetEnded: true, city: "WASHINGTON" },
       { number: "1600", street: "PENNSYLVANIA AVE WASHINGTON" },
     ]);
   });
 
   it("finds a street without a house number", () => {
-    expect(parse("ridge st 10709")[0]).toEqual({ street: "RIDGE ST", postcode: "10709" });
+    expect(parse("ridge st 10709")[0]).toEqual({ street: "RIDGE ST", streetEnded: true, postcode: "10709" });
   });
 });
 
 describe("parse", () => {
   it("splits number, street and place at a comma", () => {
     expect(parse("300 e capitol ave, springfield il 62701")).toEqual([
-      { number: "300", street: "E CAPITOL AVE", city: "SPRINGFIELD", state: "IL", postcode: "62701" },
+      { number: "300", street: "E CAPITOL AVE", streetEnded: true, city: "SPRINGFIELD", state: "IL", postcode: "62701" },
     ]);
   });
 
   it("finds city, state and ZIP without commas", () => {
     expect(parse("2 ridge st eastchester ny 10709")[0]).toEqual({
-      number: "2", street: "RIDGE ST", city: "EASTCHESTER", state: "NY", postcode: "10709",
+      number: "2", street: "RIDGE ST", streetEnded: true, city: "EASTCHESTER", state: "NY", postcode: "10709",
     });
-    expect(parse("2 ridge st 10709")[0]).toEqual({ number: "2", street: "RIDGE ST", postcode: "10709" });
-    expect(parse("2 ridge street eastchester")[0]).toEqual({ number: "2", street: "RIDGE ST", city: "EASTCHESTER" });
+    expect(parse("2 ridge st 10709")[0]).toEqual({ number: "2", street: "RIDGE ST", streetEnded: true, postcode: "10709" });
+    expect(parse("2 ridge street eastchester")[0]).toEqual({ number: "2", street: "RIDGE ST", streetEnded: true, city: "EASTCHESTER" });
   });
 
   it("reads a half-typed place loosely", () => {
-    expect(parse("2 ridge st 107")[0]).toEqual({ number: "2", street: "RIDGE ST", postcode: "107" });
-    expect(parse("2 ridge st eastchester n")[0]).toEqual({ number: "2", street: "RIDGE ST", city: "EASTCHESTER" });
+    expect(parse("2 ridge st 107")[0]).toEqual({ number: "2", street: "RIDGE ST", streetEnded: true, postcode: "107" });
+    expect(parse("2 ridge st eastchester n")[0]).toEqual({ number: "2", street: "RIDGE ST", streetEnded: true, city: "EASTCHESTER" });
   });
 
   it("keeps a direction after the street type, but also tries it as a state", () => {
     const readings = parse("100 12th st ne washington dc");
-    expect(readings[0]).toEqual({ number: "100", street: "12TH ST NE", city: "WASHINGTON", state: "DC" });
-    expect(readings[1]).toEqual({ number: "100", street: "12TH ST", city: "NE WASHINGTON", state: "DC" });
+    expect(readings[0]).toEqual({ number: "100", street: "12TH ST NE", streetEnded: true, city: "WASHINGTON", state: "DC" });
+    expect(readings[1]).toEqual({ number: "100", street: "12TH ST", streetEnded: true, city: "NE WASHINGTON", state: "DC" });
   });
 
   it("always tries the whole text as a street too", () => {
@@ -116,5 +116,31 @@ describe("parse", () => {
     expect(street("350 5 a")).toBe("5TH A");
     expect(street("350 e fift")).toBe("E");
     expect(parse("350 fift")).toEqual([]);
+  });
+});
+
+// Records are sorted by "STREET|CITY|STATE"; the prefix decides which blocks a search reads.
+describe("keyPrefix", () => {
+  const key = (input: string) => keyPrefix(parse(input)[0]);
+
+  it("narrows a finished street to the town", () => {
+    expect(key("123 main st springfield ma")).toBe("MAIN ST|SPRINGFIELD");
+    expect(key("123 Main St, Springfield")).toBe("MAIN ST|SPRINGFIELD");
+    expect(key("2 ridge st eastch")).toBe("RIDGE ST|EASTCH");
+  });
+
+  it("closes a finished street even without a city", () => {
+    expect(key("2 ridge st 10709")).toBe("RIDGE ST|");
+    expect(key("2 ridge st ny")).toBe("RIDGE ST|");
+  });
+
+  it("leaves a street that may still be typed open", () => {
+    expect(key("2 ridge st")).toBe("RIDGE ST");
+    expect(key("123 main stre")).toBe("MAIN ST");
+    expect(key("eastchester 2 ridge st")).toBe("RIDGE ST");
+  });
+
+  it("takes a finished street's last word as typed", () => {
+    expect(key("1 e fifth, springfield")).toBe("E 5TH|SPRINGFIELD");
   });
 });
