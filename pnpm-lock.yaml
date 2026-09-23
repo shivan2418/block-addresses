@@ -9,15 +9,15 @@ importers:
   .:
     dependencies:
       blockdb:
-        specifier: https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-0.4.0.tgz
-        version: https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-0.4.0.tgz
+        specifier: https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-0.5.0.tgz
+        version: https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-0.5.0.tgz
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.3.1
         version: 7.3.1(svelte@5.57.1)(vite@8.3.0)
       blockdb-cli:
-        specifier: https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-cli-0.4.0.tgz
-        version: https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-cli-0.4.0.tgz
+        specifier: https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-cli-0.5.0.tgz
+        version: https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-cli-0.5.0.tgz
       svelte:
         specifier: ^5.57.1
         version: 5.57.1
@@ -210,15 +210,15 @@ packages:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
     engines: {node: '>= 0.4'}
 
-  blockdb-cli@https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-cli-0.4.0.tgz:
-    resolution: {tarball: https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-cli-0.4.0.tgz}
-    version: 0.4.0
+  blockdb-cli@https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-cli-0.5.0.tgz:
+    resolution: {tarball: https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-cli-0.5.0.tgz}
+    version: 0.5.0
     engines: {node: '>=20'}
     hasBin: true
 
-  blockdb@https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-0.4.0.tgz:
-    resolution: {tarball: https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-0.4.0.tgz}
-    version: 0.4.0
+  blockdb@https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-0.5.0.tgz:
+    resolution: {tarball: https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-0.5.0.tgz}
+    version: 0.5.0
     engines: {node: '>=20'}
 
   chai@6.2.2:
@@ -657,9 +657,9 @@ snapshots:
 
   axobject-query@4.1.0: {}
 
-  blockdb-cli@https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-cli-0.4.0.tgz: {}
+  blockdb-cli@https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-cli-0.5.0.tgz: {}
 
-  blockdb@https://github.com/shivan2418/blockdb/releases/download/v0.4.0/blockdb-0.4.0.tgz: {}
+  blockdb@https://github.com/shivan2418/blockdb/releases/download/v0.5.0/blockdb-0.5.0.tgz: {}
 
   chai@6.2.2: {}
 
