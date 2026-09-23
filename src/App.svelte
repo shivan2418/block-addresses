@@ -96,7 +96,7 @@
       oninput={onInput}
       onkeydown={(e) => e.key === "Escape" && clear()}
       readonly={locked !== null}
-      placeholder="Start typing an address, e.g. 2 Ridge St, Eastchester NY"
+      placeholder="Start typing an address, e.g. 1600 Pennsylvania Ave NW, Washington DC"
       autocomplete="off"
       spellcheck="false"
       aria-label="Address"
