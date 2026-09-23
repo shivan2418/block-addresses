@@ -4,10 +4,9 @@ Start typing a US street address and pick the right one from five suggestions. T
 dataset, about 160 million addresses, sits in static files on GitHub Pages. The browser queries it
 directly, with no server, no database and no search API.
 
-It's a proof of concept for [blockdb](https://github.com/shivan2418/blockdb), and a stress test: the
-same engine as the
-[Scryfall demo](https://github.com/shivan2418/blockdb-demo-scryfall), pointed at more than a
-thousand times as many records.
+It's a proof of concept for [blockdb](https://github.com/shivan2418/blockdb), and a stress test:
+the same engine as the [Scryfall demo](https://github.com/shivan2418/blockdb-demo-scryfall),
+pointed at more than a thousand times as many records.
 
 **Live:** https://shivan2418.github.io/block-addresses/
 
