@@ -5,6 +5,8 @@
   let query = $state("");
   let results = $state<string[]>([]);
   let loading = $state(false);
+  // Too little typed to search yet (or a half-typed word was dropped).
+  let waiting = $state(false);
   let error = $state("");
   let copied = $state<string | null>(null);
   let toast = $state<{ id: number; text: string } | null>(null);
@@ -14,8 +16,9 @@
   let total = $state<number | null>(null);
   totalAddresses().then((n) => (total = n), () => {});
 
-  // Each keystroke starts a search after a short pause; a newer one makes older answers stale,
-  // so only the latest request's results are ever shown.
+  // A search starts once typing pauses for DEBOUNCE ms. A newer one cancels the older, so only
+  // the latest request's results are ever shown.
+  const DEBOUNCE = 300;
   let latest = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -33,7 +36,8 @@
       try {
         const records = await search(text);
         if (id !== latest) return;
-        // Not searchable yet (e.g. a half-typed word was dropped): keep showing the last results.
+        // Not searchable yet: keep showing the last results.
+        waiting = records === null;
         if (records) results = [...new Set(records.map(format))];
         error = "";
       } catch (e) {
@@ -42,7 +46,7 @@
       } finally {
         if (id === latest) loading = false;
       }
-    }, 150);
+    }, DEBOUNCE);
   }
 
   function lock(address: string) {
@@ -112,7 +116,7 @@
 
   {#if error}
     <p class="status">Something went wrong: {error}</p>
-  {:else if query.trim() && !loading && results.length === 0}
+  {:else if query.trim() && !loading && !waiting && results.length === 0}
     <p class="status">No matching addresses</p>
   {/if}
 

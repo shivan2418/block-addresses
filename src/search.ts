@@ -4,14 +4,16 @@ import rules from "../scripts/normalize.json";
 
 type Where = NonNullable<NonNullable<Parameters<Db["addresses"]["findMany"]>[0]>["where"]>;
 
-// GitHub Pages lets browsers cache every file for 10 minutes. The data files are
-// content-hashed, so a cached copy is always right, but the manifest keeps its name across
-// deploys: a stale one points at files the new deploy removed. So it is revalidated on every
-// visit, which costs a 304 when nothing changed.
-const revalidateManifest: typeof fetch = (input, init) =>
-  fetch(input, String(input).includes("/manifest.json") ? { ...init, cache: "no-cache" } : init);
+// Search-as-you-type starts a query per pause, and each downloads at least one ~2 MB block.
+// When a newer search starts, the older one's downloads are cancelled. The manifest is left
+// out: the runtime shares one copy of it across every query, so it must never be cancelled.
+let current = new AbortController();
+const cancellableFetch: typeof fetch = (input, init) =>
+  String(input).includes("/manifest.json")
+    ? fetch(input, init)
+    : fetch(input, { ...init, signal: AbortSignal.any([init?.signal, current.signal].filter((s) => s != null)) });
 
-const db = connect({ basePath: `${import.meta.env.BASE_URL}blockdb`, fetch: revalidateManifest });
+const db = connect({ basePath: `${import.meta.env.BASE_URL}blockdb`, fetch: cancellableFetch });
 
 // Shared with scripts/compact.py: stored streets are already normalized with these lists, so
 // typed text has to be normalized the same way before it can prefix-match. "FIFTH", "05TH" and
@@ -243,11 +245,17 @@ function where(q: Query): Where {
   };
 }
 
+const MIN_STREET = 3;
+
 // Resolves to null when the input can't be searched yet: a bare number would match millions of
-// records, so wait for at least the start of the street. Every reading of the input is queried
+// records, so wait for at least the first few letters of the street. Starting a search cancels
+// the previous one, whose promise then rejects. Every reading of the input is queried
 // at once and the results are merged.
 export async function search(input: string, limit = 5): Promise<Addresses[] | null> {
-  const readings = parse(input);
+  current.abort();
+  current = new AbortController();
+  // One or two letters of a street match nearly everything, so they'd only cost a download.
+  const readings = parse(input).filter((q) => q.street!.replace(/ /g, "").length >= MIN_STREET);
   if (!readings.length) return null;
   const pages = await Promise.all(readings.map((q) => db.addresses.findMany({ where: where(q), limit })));
   // Interleave, so a reading that matches nothing useful can't crowd out the others.
