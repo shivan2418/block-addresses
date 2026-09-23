@@ -2,7 +2,7 @@
   "name": "block-addresses",
   "private": true,
   "type": "module",
-  "description": "Test site for blockdb: every US address from OpenAddresses, queried from a static host.",
+  "description": "Proof of concept for blockdb: every US address, searched from static files on GitHub Pages.",
   "scripts": {
     "fetch-overture": "uv run --with duckdb python scripts/fetch_overture.py",
     "fetch-census": "scripts/fetch_census.sh",
@@ -16,11 +16,11 @@
     "deploy-pages": "scripts/deploy.sh"
   },
   "dependencies": {
-    "blockdb": "link:../blockdb/packages/blockdb"
+    "blockdb": "https://github.com/shivan2418/blockdb/releases/download/v0.3.0/blockdb-0.3.0.tgz"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "blockdb-cli": "link:../blockdb/packages/blockdb-cli",
+    "blockdb-cli": "https://github.com/shivan2418/blockdb/releases/download/v0.3.0/blockdb-cli-0.3.0.tgz",
     "svelte": "^5.57.1",
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.3",

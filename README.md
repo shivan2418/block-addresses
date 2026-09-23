@@ -126,8 +126,8 @@ is normalized exactly the way the stored streets were: `350 fifth avenue` finds 
 
 ## Running it locally
 
-You need Node 24 and pnpm. blockdb isn't on npm yet, so `package.json` links to a checkout of it
-at `../blockdb`.
+You need Node 24 and pnpm. blockdb isn't on npm yet, so it installs from the
+[v0.3.0 GitHub Release](https://github.com/shivan2418/blockdb/releases/tag/v0.3.0) tarballs.
 
 ```sh
 pnpm install
