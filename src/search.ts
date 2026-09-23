@@ -4,16 +4,14 @@ import rules from "../scripts/normalize.json";
 
 type Where = NonNullable<NonNullable<Parameters<Db["addresses"]["findMany"]>[0]>["where"]>;
 
-// Search-as-you-type starts a query per pause, and each downloads at least one ~2 MB block.
-// When a newer search starts, the older one's downloads are cancelled. The manifest is left
-// out: the runtime shares one copy of it across every query, so it must never be cancelled.
-let current = new AbortController();
-const cancellableFetch: typeof fetch = (input, init) =>
-  String(input).includes("/manifest.json")
-    ? fetch(input, init)
-    : fetch(input, { ...init, signal: AbortSignal.any([init?.signal, current.signal].filter((s) => s != null)) });
+let db = connect({ basePath: `${import.meta.env.BASE_URL}blockdb` });
 
-const db = connect({ basePath: `${import.meta.env.BASE_URL}blockdb`, fetch: cancellableFetch });
+// The data lives next to the page. A relative basePath would resolve against whatever loads this
+// module, and in the search worker that's the script's own URL (assets/), so the worker passes
+// an absolute one.
+export function useBasePath(basePath: string): void {
+  db = connect({ basePath });
+}
 
 // Shared with scripts/compact.py: stored streets are already normalized with these lists, so
 // typed text has to be normalized the same way before it can prefix-match. "FIFTH", "05TH" and
@@ -248,16 +246,23 @@ function where(q: Query): Where {
 const MIN_STREET = 3;
 
 // Resolves to null when the input can't be searched yet: a bare number would match millions of
-// records, so wait for at least the first few letters of the street. Starting a search cancels
-// the previous one, whose promise then rejects. Every reading of the input is queried
+// records, so wait for at least the first few letters of the street. Every reading of the input is queried
 // at once and the results are merged.
-export async function search(input: string, limit = 5): Promise<Addresses[] | null> {
-  current.abort();
-  current = new AbortController();
+// Search-as-you-type starts a query per pause, and each downloads at least one data block.
+// A search whose input the new one merely extends ("123 MAI" → "123 MAIN") is left to finish:
+// it's fetching mostly the same blocks, which the browser then has cached. Anything else
+// (a deletion, a different word) cancels it; its promise rejects with code ABORTED.
+let previous: { input: string; controller: AbortController } | null = null;
+
+export async function search(input: string, limit = 20): Promise<Addresses[] | null> {
+  if (previous && !input.startsWith(previous.input)) previous.controller.abort();
+  const controller = new AbortController();
+  previous = { input, controller };
+  const { signal } = controller;
   // One or two letters of a street match nearly everything, so they'd only cost a download.
   const readings = parse(input).filter((q) => q.street!.replace(/ /g, "").length >= MIN_STREET);
   if (!readings.length) return null;
-  const pages = await Promise.all(readings.map((q) => db.addresses.findMany({ where: where(q), limit })));
+  const pages = await Promise.all(readings.map((q) => db.addresses.findMany({ where: where(q), limit, signal })));
   // Interleave, so a reading that matches nothing useful can't crowd out the others.
   const unique = new Map<string, Addresses>();
   for (let i = 0; i < limit; i++) {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fade, fly } from "svelte/transition";
-  import { format, search, totalAddresses } from "./search";
+  import { search, totalAddresses } from "./search-client";
 
   let query = $state("");
   let results = $state<string[]>([]);
@@ -34,11 +34,11 @@
     loading = true;
     timer = setTimeout(async () => {
       try {
-        const records = await search(text);
+        const addresses = await search(text);
         if (id !== latest) return;
         // Not searchable yet: keep showing the last results.
-        waiting = records === null;
-        if (records) results = [...new Set(records.map(format))];
+        waiting = addresses === null;
+        if (addresses) results = [...new Set(addresses)];
         error = "";
       } catch (e) {
         if (id !== latest) return;
@@ -65,6 +65,18 @@
     input.focus();
   }
 
+  // Up to 20 results come back; VISIBLE of them show, and the list scrolls for the rest. Rows
+  // wrap on narrow screens, so the height is measured from the rows rather than fixed.
+  const VISIBLE = 5;
+  function fitRows(_: string[]) {
+    return (ul: HTMLUListElement) => {
+      const rows = ul.children;
+      ul.style.maxHeight =
+        rows.length > VISIBLE ? `${(rows[VISIBLE] as HTMLElement).offsetTop}px` : ""; // rows sit in the list
+      ul.scrollTop = 0;
+    };
+  }
+
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   function notify(text: string) {
@@ -89,7 +101,7 @@
 </script>
 
 <main>
-  <h1>Search {total === null ? "every" : total.toLocaleString("en-US")} US addresses</h1>
+  <h1>Search {total === null ? "" : total.toLocaleString("en-US")} US addresses</h1>
   <p class="tagline">
     A proof of concept for <a href="https://github.com/shivan2418/blockdb">blockdb</a>. There's no API
     and no server: your browser searches static files directly.
@@ -120,7 +132,7 @@
     <p class="status">No matching addresses</p>
   {/if}
 
-  <ul class:loading>
+  <ul class:loading class:more={results.length > VISIBLE} {@attach fitRows(results)}>
     {#each results as address (address)}
       <li class:locked={locked === address}>
         <button type="button" class="pick" onclick={() => lock(address)} disabled={locked !== null}>
@@ -262,10 +274,18 @@
   }
 
   ul {
+    position: relative;
     list-style: none;
     margin: 12px 0 0;
     padding: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     transition: opacity 0.15s;
+  }
+
+  /* A soft edge at the bottom says the list scrolls. */
+  ul.more {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
   }
 
   ul.loading {

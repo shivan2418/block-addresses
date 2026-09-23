@@ -36,9 +36,14 @@ if [ ! -d "$GIT_DIR" ]; then
 fi
 
 # A browser may still hold the previous index.html for a few minutes (Pages caches for 10), and
-# it points at the previous build's hashed scripts. Keep exactly those for one more deploy.
-if git rev-parse -q --verify refs/heads/gh-pages >/dev/null; then
-  git show refs/heads/gh-pages:index.html | grep -o 'assets/[^"]*' | while read -r f; do
+# it loads the previous build's hashed scripts (and they, the search worker). Each deploy lists
+# its own build's assets in .build-assets, and the next one keeps exactly those for one more
+# deploy.
+ls dist/assets | sed 's|^|assets/|' > dist/.build-assets
+previous=$(git show refs/heads/gh-pages:.build-assets 2>/dev/null ||
+  git show refs/heads/gh-pages:index.html 2>/dev/null | grep -o 'assets/[^"]*' || true) # before .build-assets existed
+if [ -n "$previous" ]; then
+  for f in $previous; do
     [ -e "dist/$f" ] || git show "refs/heads/gh-pages:$f" > "dist/$f"
   done
 fi
