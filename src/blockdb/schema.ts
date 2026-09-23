@@ -15,11 +15,12 @@ export interface Records {
 export const schema = {
   addresses: {
     fields: {
-      number: { kind: "string", operators: ["equals", "in", "startsWith", "not"] },
-      street: { kind: "string", operators: ["equals", "in", "gt", "gte", "lt", "lte", "startsWith", "not"] },
-      state: { kind: "string", operators: ["equals", "in", "startsWith", "not"] },
-      city: { kind: "string", operators: ["equals", "in", "startsWith", "not", "isAbsent", "exists"], absent: true },
-      postcode: { kind: "string", operators: ["equals", "in", "startsWith", "not", "isAbsent", "exists"], absent: true },
+      number: { kind: "string", operators: ["equals", "in", "startsWith", "endsWith", "contains", "not"], pruning: [] },
+      street: { kind: "string", operators: ["equals", "in", "gt", "gte", "lt", "lte", "startsWith", "endsWith", "contains", "not"], pruning: ["equals", "in", "gt", "gte", "lt", "lte", "startsWith"] },
+      state: { kind: "string", operators: ["equals", "in", "startsWith", "endsWith", "contains", "not"], pruning: ["equals", "in", "startsWith"] },
+      city: { kind: "string", operators: ["equals", "in", "startsWith", "endsWith", "contains", "not", "isAbsent", "exists"], pruning: ["equals", "in", "startsWith"], absent: true },
+      unit: { kind: "string", operators: ["equals", "in", "startsWith", "endsWith", "contains", "not", "isAbsent", "exists"], pruning: [], absent: true },
+      postcode: { kind: "string", operators: ["equals", "in", "startsWith", "endsWith", "contains", "not", "isAbsent", "exists"], pruning: ["equals", "in", "startsWith"], absent: true },
     },
   },
 } as const;

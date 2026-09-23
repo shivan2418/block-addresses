@@ -4,6 +4,8 @@
   "type": "module",
   "description": "Test site for blockdb: every US address from OpenAddresses, queried from a static host.",
   "scripts": {
+    "fetch-overture": "uv run --with duckdb python scripts/fetch_overture.py",
+    "fetch-census": "scripts/fetch_census.sh",
     "compact": "uv run --with duckdb python scripts/compact.py",
     "build-data": "blockdb build",
     "dev": "vite",

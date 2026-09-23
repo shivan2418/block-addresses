@@ -9,8 +9,7 @@
     "sortField": "street",
     "fields": {
       "number": {
-        "kind": "string",
-        "indexed": true
+        "kind": "string"
       },
       "street": {
         "kind": "string"

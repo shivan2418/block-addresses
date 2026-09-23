@@ -3,8 +3,13 @@
 # gh-pages branch. Run `pnpm build-data` first whenever data/ has changed.
 #
 # The blocks are built from data/ (gitignored, 11 GB), so this runs locally, not in Actions.
-# gh-pages is force-pushed as a single commit: it holds ~660 MB of content-hashed blocks, and
-# keeping each deploy's history would grow the repo by that much every time.
+#
+# .gh-pages.git (gitignored) keeps the last deploy between runs. When the data is unchanged
+# (same manifest), the new commit goes on top of it, so git knows what GitHub already has and
+# the push uploads only changed files: a page-only change sends kilobytes. When the data was
+# rebuilt, nearly every content-hashed block changes anyway, so the branch restarts as a
+# single parentless commit instead, and GitHub can drop the old blocks rather than keep
+# ~700 MB of history per data refresh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -13,14 +18,31 @@ if [ ! -f public/blockdb/manifest.json.gz ]; then
   exit 1
 fi
 
-remote=$(git remote get-url origin)
+remote=${DEPLOY_REMOTE:-$(git remote get-url origin)}
+source_commit=$(git rev-parse --short HEAD)
+export GIT_AUTHOR_NAME GIT_COMMITTER_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_EMAIL
+GIT_AUTHOR_NAME=$(git config user.name) GIT_AUTHOR_EMAIL=$(git config user.email)
+GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
 pnpm build
 touch dist/.nojekyll # plain static files; Jekyll would only slow down publishing ~9k of them
 
-cd dist
-rm -rf .git
-git init -q -b gh-pages
+export GIT_DIR="$PWD/.gh-pages.git" GIT_WORK_TREE="$PWD/dist"
+if [ ! -d "$GIT_DIR" ]; then
+  env -u GIT_DIR -u GIT_WORK_TREE git init -q --bare "$GIT_DIR"
+  git config core.bare false # its work tree is dist/
+  # First run on this machine: fetch what's deployed, so even this push sends only changes.
+  git fetch -q --depth 1 "$remote" gh-pages:refs/heads/gh-pages 2>/dev/null || true
+  git read-tree refs/heads/gh-pages 2>/dev/null || true
+fi
+
 git add -A
-git commit -q -m "Deploy $(git -C .. rev-parse --short HEAD)"
-git push -q -f "$remote" gh-pages
-rm -rf .git
+manifest=blockdb/manifest.json.gz
+parent=()
+if [ "$(git rev-parse -q --verify "refs/heads/gh-pages:$manifest" || true)" = "$(git hash-object "dist/$manifest")" ]; then
+  parent=(-p refs/heads/gh-pages)
+fi
+commit=$(git commit-tree "$(git write-tree)" "${parent[@]}" -m "Deploy $source_commit")
+git push -q -f "$remote" "$commit:refs/heads/gh-pages"
+git update-ref refs/heads/gh-pages "$commit"
+# After a data rebuild, drop the previous deploy's blocks from the local cache.
+[ ${#parent[@]} -gt 0 ] || { git reflog expire --expire=now --all && git gc -q --prune=now; }

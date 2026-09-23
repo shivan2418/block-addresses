@@ -1,8 +1,13 @@
-"""Compact OpenAddresses GeoJSON into deduplicated per-state NDJSON for blockdb.
+"""Merge, clean and deduplicate US addresses into per-state NDJSON for blockdb.
 
-Reads addresses/us/<state>/*-addresses-*.geojson (extracted from the OpenAddresses
-collection zips) and writes data/addresses/<state>.ndjson: one flat record per unique
-address, coordinates and GeoJSON wrapping dropped, empty fields omitted.
+Sources, both read per state:
+  - addresses/us/<state>/*-addresses-*.geojson, extracted from the OpenAddresses collection zips
+  - overture/us.parquet, the US rows of Overture's addresses theme (mostly the National
+    Address Database), fetched by scripts/fetch_overture.py
+
+Missing ZIP codes and cities are then filled in from Census boundaries (census/*.zip) by
+point-in-polygon lookup. Writes data/addresses/<state>.ndjson: one flat record per unique
+address, coordinates dropped, empty fields omitted.
 
 Run: uv run --with duckdb python scripts/compact.py [state ...]
 """
@@ -16,7 +21,25 @@ import duckdb
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "addresses", "us")
+OVERTURE = os.path.join(ROOT, "overture", "us.parquet")
+OVERTURE_BY_STATE = os.path.join(ROOT, "overture", "by-state")
+CENSUS = os.path.join(ROOT, "census")
+BOUNDARIES = os.path.join(CENSUS, "boundaries.duckdb")
 OUT = os.path.join(ROOT, "data", "addresses")
+
+STATES = ("AL AK AZ AR CA CO CT DC DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV "
+          "NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY").split()
+
+# Census cartographic boundary files (https://www.census.gov/geographies/mapping-files.html).
+CENSUS_FILES = {
+    "zcta": "cb_2020_us_zcta520_500k",
+    "place": "cb_2023_us_place_500k",
+    "cousub": "cb_2023_us_cousub_500k",
+}
+# County subdivisions that people use as a town name: town, township, city, borough, village.
+# The rest (census county divisions, precincts, unorganized territory) are statistical.
+COUSUB_TOWN_LSAD = ("43", "44", "25", "21", "47")
+NYC_BOROUGHS = ("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
 
 # The word lists are shared with the site's search (src/search.ts), which has to normalize
 # typed text exactly the way stored streets are normalized here.
@@ -56,6 +79,11 @@ def cleaned(col: str) -> str:
     return f"regexp_replace(regexp_replace(upper(trim({col})), '[.,#]', '', 'g'), '\\s+', ' ', 'g')"
 
 
+def city_cleaned(col: str) -> str:
+    """cleaned(), minus the legal-name prefix some sources carry ("CITY OF EL PASO")."""
+    return f"regexp_replace({cleaned(col)}, '^(CITY|TOWN|VILLAGE|TOWNSHIP|BOROUGH) OF ', '')"
+
+
 def normalized(col: str) -> str:
     return f"array_to_string(list_transform(string_split({cleaned(col)}, ' '), t -> {ABBREVIATE}), ' ')"
 
@@ -83,50 +111,145 @@ def ordinalized(toks: str) -> str:
         end, t)), ' ')"""
 
 
+def ensure_boundaries() -> None:
+    """Load the Census shapefiles into a DuckDB file once; later runs just attach it."""
+    if os.path.exists(BOUNDARIES):
+        return
+    con = duckdb.connect(BOUNDARIES + ".tmp")
+    con.execute("install spatial; load spatial")
+    for table, name in CENSUS_FILES.items():
+        shp = f"/vsizip/{CENSUS}/{name}.zip/{name}.shp"
+        cols = "ZCTA5CE20 as zip" if table == "zcta" else "NAME as name, STUSPS as state, LSAD as lsad"
+        con.execute(f"create table {table} as select {cols}, geom from st_read('{shp}')")
+    con.close()
+    os.replace(BOUNDARIES + ".tmp", BOUNDARIES)
+
+
+def ensure_overture_by_state() -> None:
+    """Split overture/us.parquet by state once, so each state reads only its own rows."""
+    if os.path.exists(OVERTURE_BY_STATE):
+        return
+    tmp = OVERTURE_BY_STATE + ".tmp"
+    duckdb.execute(f"""
+        copy (select *, address_levels[1].value as state from '{OVERTURE}')
+        to '{tmp}' (format parquet, partition_by (state), compression zstd)
+    """)
+    os.replace(tmp, OVERTURE_BY_STATE)
+
+
 def compact_state(con: duckdb.DuckDBPyConnection, state: str) -> tuple[int, int]:
+    region = state.upper()
+    sources = []
+
     pattern = os.path.join(SRC, state, "*-addresses-*.geojson")
-    con.execute(f"""
-        create or replace temp table raw as
-        with parsed as (
-        select
-          upper(trim(properties.number)) as number,
-          {street_tokens('properties.street')} as street_toks,
-          {normalized('properties.unit')} as unit,
-          {cleaned('properties.city')} as city,
-          case when regexp_matches(trim(properties.postcode), '^[0-9]{{5}}')
-               then left(trim(properties.postcode), 5) else '' end as postcode,
-          geometry.coordinates[1] as lon,
-          geometry.coordinates[2] as lat
+    if os.path.isdir(os.path.join(SRC, state)):
+        sources.append(f"""
+        select properties.number as number, properties.street as street, properties.unit as unit,
+          properties.city as city, properties.postcode as postcode,
+          geometry.coordinates[1] as lon, geometry.coordinates[2] as lat
         from read_json('{pattern}', format = 'newline_delimited',
           columns = {{
             'properties': 'STRUCT(number VARCHAR, street VARCHAR, unit VARCHAR, city VARCHAR, postcode VARCHAR)',
             'geometry': 'STRUCT(coordinates DOUBLE[])'
-          }})
-        where trim(properties.number) not in ('', '0')
-          and regexp_matches(properties.street, '[A-Za-z0-9]')
-          and geometry.coordinates[1] is not null
+          }})""")
+    overture = os.path.join(OVERTURE_BY_STATE, f"state={region}")
+    if os.path.isdir(overture):
+        # postal_city is the mailing city (NAD); the second address level is the
+        # municipality (Overture's OpenAddresses rows).
+        sources.append(f"""
+        select number, street, unit, coalesce(postal_city, address_levels[2].value) as city,
+          postcode, lon, lat
+        from read_parquet('{overture}/*.parquet')""")
+
+    con.execute(f"""
+        create or replace temp table raw as
+        with src as ({" union all ".join(sources)}),
+        parsed as (
+        select
+          upper(trim(number)) as number,
+          {street_tokens('street')} as street_toks,
+          {normalized('unit')} as unit,
+          {city_cleaned('city')} as city,
+          case when regexp_matches(trim(postcode), '^[0-9]{{5}}')
+               then left(trim(postcode), 5) else '' end as postcode,
+          lon, lat
+        from src
+        where trim(number) not in ('', '0')
+          and regexp_matches(street, '[A-Za-z0-9]')
+          and lon is not null
         )
-        select number, {ordinalized('street_toks')} as street, unit, city, postcode, lon, lat
+        select number, {ordinalized('street_toks')} as street, coalesce(unit, '') as unit,
+          coalesce(city, '') as city, postcode, lon, lat
         from parsed
     """)
     read = con.execute("select count(*) from raw").fetchone()[0]
 
     # A duplicate is the same number + street + unit within a ~0.1° (~11 km) cell: the
     # cell keeps "100 MAIN ST" in two different towns apart, while tolerating the metres
-    # of disagreement between sources. Coordinates are used only for this, never written.
-    # Of each duplicate group, keep the row with the most of city/postcode filled in.
-    rows = con.execute("""
-        select number, street, unit, city, postcode
+    # of disagreement between sources. Of each duplicate group, keep the row with the most
+    # of city/postcode filled in.
+    con.execute("""
+        create or replace temp table dedup as
+        select row_number() over () as id, number, street, unit, city, postcode, lon, lat
         from raw
         qualify row_number() over (
           partition by number, street, unit, round(lat, 1), round(lon, 1)
           order by (city <> '')::int + (postcode <> '')::int desc, city, postcode
         ) = 1
+    """)
+
+    # Fill what's still missing from the Census boundary each point falls in. ZIP code
+    # tabulation areas match the real ZIP for ~99% of addresses that have one. For the city,
+    # a Census place wins; outside places, the town or township.
+    #
+    # New York City is one Census place, and its sources call every address "New York", but
+    # only Manhattan's mail says so: the other four boroughs' addresses are written as
+    # "Brooklyn", "Bronx" and so on. So there a "NEW YORK" city is replaced by the borough.
+    con.execute(f"""
+        create or replace temp table zip_fill as
+        select d.id, any_value(z.zip) as zip
+        from dedup d join b.zcta z on st_contains(z.geom, st_point(d.lon, d.lat))
+        where d.postcode = ''
+        group by d.id
+    """)
+    boroughs = tuple(b for b in NYC_BOROUGHS if b != "Manhattan")
+    con.execute(f"""
+        create or replace temp table city_fill as
+        with need as (
+          select id, lon, lat from dedup
+          where city = '' or ('{region}' = 'NY' and city = 'NEW YORK')
+        ),
+        place as (
+          select n.id, any_value(p.name) as name
+          from need n join (select * from b.place where state = '{region}') p
+            on st_contains(p.geom, st_point(n.lon, n.lat))
+          group by n.id
+        ),
+        town as (
+          select n.id, any_value(c.name) as name
+          from need n join (select * from b.cousub where state = '{region}'
+                             and lsad in {COUSUB_TOWN_LSAD}) c
+            on st_contains(c.geom, st_point(n.lon, n.lat))
+          group by n.id
+        ),
+        joined as (
+          select n.id, place.name as place, town.name as town,
+            coalesce('{region}' = 'NY' and place.name = 'New York' and town.name in {boroughs}, false)
+              as borough
+          from need n left join place using (id) left join town using (id)
+        )
+        select id, upper(case when borough then town else coalesce(place, town) end) as city, borough
+        from joined
+    """)
+    rows = con.execute("""
+        select number, street, unit,
+          case when c.borough then c.city else coalesce(nullif(d.city, ''), c.city, '') end as city,
+          coalesce(nullif(d.postcode, ''), z.zip, '') as postcode
+        from dedup d left join zip_fill z using (id) left join city_fill c using (id)
         order by postcode, city, street,
           try_cast(regexp_extract(number, '^[0-9]+') as bigint), number, unit
     """)
 
-    region = state.upper()
     written = 0
     tmp = os.path.join(OUT, f"{state}.ndjson.tmp")
     with open(tmp, "w") as f:
@@ -149,8 +272,11 @@ def compact_state(con: duckdb.DuckDBPyConnection, state: str) -> tuple[int, int]
 
 def main() -> None:
     os.makedirs(OUT, exist_ok=True)
-    states = sys.argv[1:] or sorted(os.listdir(SRC))
+    ensure_boundaries()
+    ensure_overture_by_state()
+    states = sys.argv[1:] or [s.lower() for s in STATES]
     con = duckdb.connect()
+    con.execute(f"install spatial; load spatial; attach '{BOUNDARIES}' as b (read_only)")
     total_read = total_written = 0
     for state in states:
         start = time.time()

@@ -5,3 +5,6 @@ dist/
 public/blockdb/
 node_modules/
 __pycache__/
+overture/
+census/
+.gh-pages.git/

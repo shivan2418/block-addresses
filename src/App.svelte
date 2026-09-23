@@ -145,11 +145,13 @@
 {/if}
 
 <footer>
-  Address data from <a href="https://openaddresses.io">OpenAddresses</a>, under each source's license.
-  Queried in the browser with <a href="https://github.com/shivan2418/blockdb">blockdb</a>.
+  Addresses from <a href="https://openaddresses.io">OpenAddresses</a> and the
+  <a href="https://www.transportation.gov/gis/national-address-database">National Address Database</a>
+  via <a href="https://overturemaps.org">Overture Maps</a>; missing cities and ZIP codes filled in from
+  U.S. Census boundaries. Queried in the browser with <a href="https://github.com/shivan2418/blockdb">blockdb</a>.
   <br />
-  Some addresses have no city or ZIP code because the county that published them left it out.
-  <a href="https://github.com/shivan2418/block-addresses#limits">Why</a>
+  Built from what local governments publish, so this isn't USPS-validated.
+  <a href="https://github.com/shivan2418/block-addresses#limits">Limits</a>
 </footer>
 
 <style>
