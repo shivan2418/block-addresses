@@ -1,11 +1,18 @@
 <script lang="ts">
-  import { format, search } from "./search";
+  import { fade, fly } from "svelte/transition";
+  import { format, search, totalAddresses } from "./search";
 
   let query = $state("");
   let results = $state<string[]>([]);
   let loading = $state(false);
   let error = $state("");
   let copied = $state<string | null>(null);
+  let toast = $state<{ id: number; text: string } | null>(null);
+  // A picked address stays put until the search box is cleared.
+  let locked = $state<string | null>(null);
+  let input: HTMLInputElement;
+  let total = $state<number | null>(null);
+  totalAddresses().then((n) => (total = n), () => {});
 
   // Each keystroke starts a search after a short pause; a newer one makes older answers stale,
   // so only the latest request's results are ever shown.
@@ -13,10 +20,10 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function onInput() {
-    const input = query;
+    const text = query;
     const id = ++latest;
     clearTimeout(timer);
-    if (!input.trim()) {
+    if (!text.trim()) {
       results = [];
       loading = false;
       return;
@@ -24,7 +31,7 @@
     loading = true;
     timer = setTimeout(async () => {
       try {
-        const records = await search(input);
+        const records = await search(text);
         if (id !== latest) return;
         // Not searchable yet (e.g. a half-typed word was dropped): keep showing the last results.
         if (records) results = [...new Set(records.map(format))];
@@ -38,8 +45,38 @@
     }, 150);
   }
 
+  function lock(address: string) {
+    latest++; // drop any search still in flight
+    clearTimeout(timer);
+    loading = false;
+    locked = address;
+    query = address;
+    results = [address];
+  }
+
+  function clear() {
+    locked = null;
+    query = "";
+    onInput();
+    input.focus();
+  }
+
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function notify(text: string) {
+    clearTimeout(toastTimer);
+    toast = { id: (toast?.id ?? 0) + 1, text };
+    toastTimer = setTimeout(() => (toast = null), 2000);
+  }
+
   async function copy(address: string) {
-    await navigator.clipboard.writeText(address);
+    try {
+      await navigator.clipboard.writeText(address);
+    } catch {
+      notify("Couldn't copy: your browser blocked clipboard access");
+      return;
+    }
+    notify("Copied to clipboard");
     copied = address;
     setTimeout(() => {
       if (copied === address) copied = null;
@@ -48,15 +85,27 @@
 </script>
 
 <main>
-  <input
-    type="search"
-    bind:value={query}
-    oninput={onInput}
-    placeholder="Start typing an address, e.g. 350 5th Ave, New York NY"
-    autocomplete="off"
-    spellcheck="false"
-    {@attach (el) => el.focus()}
-  />
+  <h1>Search {total === null ? "every" : total.toLocaleString("en-US")} US addresses</h1>
+  <p class="tagline">There's no API and no server. The browser queries static files directly.</p>
+
+  <div class="box">
+    <input
+      bind:this={input}
+      type="text"
+      bind:value={query}
+      oninput={onInput}
+      onkeydown={(e) => e.key === "Escape" && clear()}
+      readonly={locked !== null}
+      placeholder="Start typing an address, e.g. 2 Ridge St, Eastchester NY"
+      autocomplete="off"
+      spellcheck="false"
+      aria-label="Address"
+      {@attach (el) => el.focus()}
+    />
+    {#if query}
+      <button type="button" class="clear" onclick={clear} aria-label="Clear search">×</button>
+    {/if}
+  </div>
 
   {#if error}
     <p class="status">Something went wrong: {error}</p>
@@ -66,15 +115,34 @@
 
   <ul class:loading>
     {#each results as address (address)}
-      <li>
-        <span>{address}</span>
-        <button type="button" onclick={() => copy(address)} aria-label="Copy {address}">
+      <li class:locked={locked === address}>
+        <button type="button" class="pick" onclick={() => lock(address)} disabled={locked !== null}>
+          {#if locked === address}
+            <svg class="lock" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="3" y="7" width="10" height="7" rx="1.5" />
+              <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" />
+            </svg>
+          {/if}
+          {address}
+        </button>
+        <button type="button" class="copy" onclick={() => copy(address)} aria-label="Copy {address}">
           {copied === address ? "Copied" : "Copy"}
         </button>
       </li>
     {/each}
   </ul>
+  {#if locked}
+    <p class="status">Clear the search to look up another address.</p>
+  {/if}
 </main>
+
+{#if toast}
+  {#key toast.id}
+    <div class="toast" role="status" in:fly={{ y: 12, duration: 180 }} out:fade={{ duration: 200 }}>
+      {toast.text}
+    </div>
+  {/key}
+{/if}
 
 <footer>
   Address data from <a href="https://openaddresses.io">OpenAddresses</a>, under each source's license.
@@ -87,27 +155,92 @@
 <style>
   :global(body) {
     margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
     background: #fff;
     color: #1a1a1a;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
+  :global(#app) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
   main {
+    flex: 1;
+    box-sizing: border-box;
+    width: 100%;
     max-width: 640px;
     margin: 0 auto;
-    padding: 18vh 16px 32px;
+    padding: 38vh 16px 48px;
+  }
+
+  /* On phones the keyboard covers the lower half, where the results would be. */
+  @media (max-width: 600px) {
+    main {
+      padding-top: 12vh;
+    }
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tagline {
+    margin: 8px 0 24px;
+    font-size: 15px;
+    color: #777;
+    text-align: center;
+  }
+
+  .box {
+    position: relative;
   }
 
   input {
     box-sizing: border-box;
     width: 100%;
-    padding: 14px 22px;
+    padding: 14px 52px 14px 22px;
     font: inherit;
     font-size: 17px;
     border: 1px solid #dcdcdc;
     border-radius: 999px;
     outline: none;
     box-shadow: 0 1px 4px rgb(0 0 0 / 0.06);
+  }
+
+  input[readonly] {
+    color: #555;
+  }
+
+  .clear {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    translate: 0 -50%;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    font-size: 22px;
+    line-height: 1;
+    color: #888;
+    background: none;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .clear:hover {
+    color: #1a1a1a;
+    background: #f2f2f2;
   }
 
   input:focus {
@@ -129,17 +262,48 @@
   li {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     padding: 10px 22px;
     border-radius: 12px;
   }
 
-  li:hover {
+  li:hover,
+  li.locked {
     background: #f5f5f5;
   }
 
-  button {
+  .pick {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  .pick:disabled {
+    cursor: default;
+  }
+
+  .lock {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    fill: #1a1a1a;
+    stroke: #1a1a1a;
+    stroke-width: 1.5;
+  }
+
+  li.locked .pick {
+    font-weight: 600;
+  }
+
+  .copy {
     flex: none;
     min-width: 68px;
     padding: 5px 12px;
@@ -152,16 +316,12 @@
     cursor: pointer;
   }
 
-  button:hover {
+  .copy:hover {
     border-color: #aaa;
   }
 
   footer {
-    position: fixed;
-    bottom: 12px;
-    left: 0;
-    right: 0;
-    padding: 0 16px;
+    padding: 0 16px 16px;
     text-align: center;
     font-size: 12px;
     line-height: 1.6;
@@ -170,6 +330,20 @@
 
   footer a {
     color: inherit;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    translate: -50% 0;
+    padding: 9px 18px;
+    font-size: 14px;
+    color: #fff;
+    background: #1a1a1a;
+    border-radius: 999px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+    white-space: nowrap;
   }
 
   .status {

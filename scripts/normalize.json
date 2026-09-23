@@ -11,5 +11,7 @@
   "teens": ["TENTH", "ELEVENTH", "TWELFTH", "THIRTEENTH", "FOURTEENTH", "FIFTEENTH", "SIXTEENTH",
             "SEVENTEENTH", "EIGHTEENTH", "NINETEENTH"],
   "tens": ["TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"],
+  "streetTypes": ["ST", "AVE", "RD", "DR", "LN", "CT", "BLVD", "PL", "CIR", "TRL", "PKWY", "TER", "SQ",
+                  "EXPY", "FWY", "XING", "CV", "HOLW", "WAY", "LOOP", "PATH", "ALY", "ROW", "RUN", "WALK"],
   "bareOrdinalTypes": ["ST", "AVE", "RD", "DR", "LN", "CT", "BLVD", "PL", "CIR", "TER", "WAY"]
 }
