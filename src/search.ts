@@ -4,7 +4,14 @@ import rules from "../scripts/normalize.json";
 
 type Where = NonNullable<NonNullable<Parameters<Db["addresses"]["findMany"]>[0]>["where"]>;
 
-const db = connect({ basePath: `${import.meta.env.BASE_URL}blockdb` });
+// GitHub Pages lets browsers cache every file for 10 minutes. The data files are
+// content-hashed, so a cached copy is always right, but the manifest keeps its name across
+// deploys: a stale one points at files the new deploy removed. So it is revalidated on every
+// visit, which costs a 304 when nothing changed.
+const revalidateManifest: typeof fetch = (input, init) =>
+  fetch(input, String(input).includes("/manifest.json") ? { ...init, cache: "no-cache" } : init);
+
+const db = connect({ basePath: `${import.meta.env.BASE_URL}blockdb`, fetch: revalidateManifest });
 
 // Shared with scripts/compact.py: stored streets are already normalized with these lists, so
 // typed text has to be normalized the same way before it can prefix-match. "FIFTH", "05TH" and

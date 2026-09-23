@@ -35,6 +35,14 @@ if [ ! -d "$GIT_DIR" ]; then
   git read-tree refs/heads/gh-pages 2>/dev/null || true
 fi
 
+# A browser may still hold the previous index.html for a few minutes (Pages caches for 10), and
+# it points at the previous build's hashed scripts. Keep exactly those for one more deploy.
+if git rev-parse -q --verify refs/heads/gh-pages >/dev/null; then
+  git show refs/heads/gh-pages:index.html | grep -o 'assets/[^"]*' | while read -r f; do
+    [ -e "dist/$f" ] || git show "refs/heads/gh-pages:$f" > "dist/$f"
+  done
+fi
+
 git add -A
 manifest=blockdb/manifest.json.gz
 parent=()
