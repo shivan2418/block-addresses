@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/blockdb-cli/config.schema.json",
+  "formatVersion": 0,
+  "collection": "addresses",
+  "input": {
+    "path": "data/addresses/*.ndjson"
+  },
+  "schema": {
+    "sortField": "street",
+    "fields": {
+      "number": {
+        "kind": "string",
+        "indexed": true
+      },
+      "street": {
+        "kind": "string"
+      },
+      "state": {
+        "kind": "string",
+        "indexed": true
+      },
+      "city": {
+        "kind": "string",
+        "indexed": true,
+        "absent": true
+      },
+      "unit": {
+        "kind": "string",
+        "absent": true
+      },
+      "postcode": {
+        "kind": "string",
+        "absent": true,
+        "indexed": true
+      }
+    }
+  },
+  "compression": "gzip"
+}

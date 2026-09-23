@@ -1,3 +1,7 @@
 *.zip
 addresses/
 data/
+dist/
+public/blockdb/
+node_modules/
+__pycache__/

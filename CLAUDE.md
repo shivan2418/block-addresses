@@ -1,0 +1,2 @@
+- always use pnpm (not npm, npx or yarn); run the blockdb CLI with `pnpm exec blockdb`
+- do not create package-lock.json - pnpm-lock.yaml is the only lock file

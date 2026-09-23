@@ -1,0 +1,15 @@
+{
+  "abbreviations": {
+    "STREET": "ST", "AVENUE": "AVE", "AV": "AVE", "ROAD": "RD", "DRIVE": "DR", "LANE": "LN",
+    "COURT": "CT", "BOULEVARD": "BLVD", "PLACE": "PL", "CIRCLE": "CIR", "TRAIL": "TRL",
+    "PARKWAY": "PKWY", "HIGHWAY": "HWY", "TERRACE": "TER", "SQUARE": "SQ", "EXPRESSWAY": "EXPY",
+    "FREEWAY": "FWY", "CROSSING": "XING", "POINT": "PT", "COVE": "CV", "HOLLOW": "HOLW",
+    "NORTH": "N", "SOUTH": "S", "EAST": "E", "WEST": "W",
+    "NORTHEAST": "NE", "NORTHWEST": "NW", "SOUTHEAST": "SE", "SOUTHWEST": "SW"
+  },
+  "unitOrdinals": ["FIRST", "SECOND", "THIRD", "FOURTH", "FIFTH", "SIXTH", "SEVENTH", "EIGHTH", "NINTH"],
+  "teens": ["TENTH", "ELEVENTH", "TWELFTH", "THIRTEENTH", "FOURTEENTH", "FIFTEENTH", "SIXTEENTH",
+            "SEVENTEENTH", "EIGHTEENTH", "NINETEENTH"],
+  "tens": ["TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"],
+  "bareOrdinalTypes": ["ST", "AVE", "RD", "DR", "LN", "CT", "BLVD", "PL", "CIR", "TER", "WAY"]
+}

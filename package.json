@@ -1,0 +1,27 @@
+{
+  "name": "block-addresses",
+  "private": true,
+  "type": "module",
+  "description": "Test site for blockdb: every US address from OpenAddresses, queried from a static host.",
+  "scripts": {
+    "compact": "uv run --with duckdb python scripts/compact.py",
+    "build-data": "blockdb build",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "blockdb": "link:../blockdb/packages/blockdb"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "blockdb-cli": "link:../blockdb/packages/blockdb-cli",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}
