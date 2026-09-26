@@ -22,6 +22,37 @@ pointed at more than a thousand times as many records.
 
 GitHub Pages allows 1 GB per site, so the goal from the start was to fit the country under that.
 
+## Compared with SQLite over HTTP
+
+The closest alternative is [sql.js-httpvfs](https://github.com/phiresky/sql.js-httpvfs): a SQLite
+database on a static host, which the browser queries with HTTP range requests, reading only the
+pages it needs. The same 159.8M addresses loaded into SQLite:
+
+| Layout | Size served |
+|---|---|
+| **blockdb** (sorted gzipped blocks, city and ZIP indexes) | **0.82 GB** |
+| SQLite, table only, no indexes | 7.4 GB |
+| SQLite, clustered on (street, city, state), `WITHOUT ROWID` | 7.6 GB |
+| SQLite, table + street, city and ZIP indexes | 18.4 GB |
+| SQLite, clustered + city and ZIP indexes | 21.1 GB |
+
+Even the smallest usable SQLite layout, which can't look up a ZIP code, is 9× larger, and
+every layout is far over GitHub Pages' 1 GB limit. The difference is compression:
+
+- **Range requests need the raw file.** SQLite has to be served uncompressed, because the
+  browser reads byte ranges of it. blockdb fetches whole blocks and unpacks them itself, so
+  they're stored gzipped.
+- **Sorted text compresses far better than SQLite's pages.** Raw, SQLite is the smaller format:
+  7.6 GB against 20.4 GB of NDJSON. But gzip shrinks the sorted NDJSON 25×, because consecutive
+  records repeat most of their text (thousands of `…|SPRINGFIELD|MA` in a row), while the
+  SQLite file only shrinks 2.5× (to 3.0 GB), since its pages are already packed binary.
+- **In a `WITHOUT ROWID` table, every secondary index repeats the primary key,** so adding city
+  and ZIP indexes to the clustered layout costs 13.5 GB.
+
+SQLite does win on a single lookup. A B-tree search reads a few 4 KB pages, about 20–40 KB,
+where blockdb downloads a whole block of about 120 KB. It takes more round trips, though, plus
+about 1 MB of WebAssembly up front. It just doesn't fit on a free static host at this size.
+
 ## Where the data comes from
 
 There's no single open list of every US address. The complete one is the USPS address
